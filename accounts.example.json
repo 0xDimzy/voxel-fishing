@@ -6,6 +6,7 @@
     "enabled": true,
 
     "character": {
+      "mode": "skip",
       "name": "Salty Captain",
       "boat": "sailboat",
       "hull": "#3f6fa9",
@@ -37,6 +38,7 @@
     "enabled": false,
 
     "character": {
+      "mode": "skip",
       "name": "Kraken Hunter",
       "boat": "pirateBoat",
       "hull": "#c44f4f",

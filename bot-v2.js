@@ -21,10 +21,12 @@ import { fileURLToPath } from 'url';
 import { loadKeypair } from './lib/wallet.js';
 import { signIn, probeToken } from './lib/auth.js';
 import { VoxelAPI } from './lib/api.js';
+import { setupCharacter as setupCharacterV2 } from './lib/character.js';
 import {
   loadAccounts,
   loadTokens,
   saveToken,
+  updateAccountCharacter,
   getToken,
   clearToken,
 } from './lib/accounts.js';
@@ -205,35 +207,53 @@ async function runAccount(acct) {
 
   const api = new VoxelAPI(sess.accessToken, proxyUrl);
 
-  // === Step 0: character setup (name + boat + 2 colors) ===
-  // Idempotent: safe to run on every startup. Runs only if config provided,
-  // OR if generateName auto-enabled. Generates random name from frontend algorithm
-  // (Salty Captain etc.) if not specified.
+  // === Step 0: character setup (idempotent, detect-first) ===
+  // setupMode:
+  //   skip   (default) — detect only, never overwrite. After detection, the
+  //                      bot writes the server's current character back to
+  //                      accounts.json so the user's config reflects reality.
+  //                      Best choice when character is set in the browser.
+  //   config           — always force accounts.json character on every run.
+  //                      Overwrites the server's character.
+  //   auto             — set on first run (writes state.json + persists
+  //                      accounts.json), then skip until config changes.
+  //                      Idempotent across runs.
   const char = acct.character || {};
-  const wantCharacter =
-    char.name || char.boat || char.hull || char.accent || char.auto !== false;
-  if (wantCharacter) {
-    try {
-      const result = await api.setupCharacter({
-        address: sess.address,
-        name: char.name,
-        boatId: char.boat,
-        hullColor: char.hull,
-        accentColor: char.accent,
-        playerId: char.playerId,
-      });
-      if (result.warnings.length > 0) {
-        for (const w of result.warnings) log.warn(`[${acct.name}] character: ${w}`);
+  const mode = char.mode || 'skip';
+  try {
+    const r = await setupCharacterV2({
+      accessToken: sess.accessToken,
+      address: sess.address,
+      mode,
+      cfg: char,
+      acctId: acct.name,
+      stateDir: path.join(ROOT, '.hermes'),
+      proxyUrl,
+      timeoutMs: 8000,
+    });
+    for (const w of r.warnings) log.warn(`[${acct.name}] character: ${w}`);
+    log.tag(acct.name, `${r.reason}${r.applied ? ' ✓ applied' : ''}`);
+
+    // === Writeback: in skip mode, persist the detected character to
+    // accounts.json so the user's config reflects what the server has. ===
+    if (mode === 'skip' && r.detected) {
+      try {
+        updateAccountCharacter(acct.name, {
+          mode: 'skip',
+          name: r.detected.name,
+          boat: r.detected.boatId,
+          hull: r.detected.hull,
+          accent: r.detected.accent,
+        });
+        log.tag(acct.name, `accounts.json updated with detected character`);
+      } catch (e) {
+        log.warn(`[${acct.name}] accounts.json writeback failed: ${e.message}`);
       }
-      log.ok(
-        `[${acct.name}] character set: "${result.name}" on ${result.boatId} ` +
-        `(hull=${result.hull}, accent=${result.accent})`
-      );
-    } catch (e) {
-      log.warn(`[${acct.name}] character setup failed: ${e.message}`);
     }
-    await actionPause(1500, 3500);
+  } catch (e) {
+    log.warn(`[${acct.name}] character setup failed: ${e.message}`);
   }
+  await actionPause(1200, 3000);
 
   // === Resolve policy from config ===
   const policy = {
@@ -261,14 +281,14 @@ async function runAccount(acct) {
     await actionPause(2000, 5000);
   }
 
-  // === Step 2: claim relic set bonus (idempotent — alreadyClaimed is fine) ===
+  // === Step 2: claim relic set bonus (idempotent — alreadyClaimed + incomplete_set both fine) ===
   if (policy.claimRelicSet) {
     try {
       const r = await api.claimRelicSet();
-      if (r?.alreadyClaimed) {
-        log.tag(acct.name, `relic-set already claimed (skipped)`);
-      } else if (r?.ok) {
+      if (r.ok) {
         log.ok(`[${acct.name}] relic-set claimed: ${JSON.stringify(r).slice(0, 120)}`);
+      } else if (r.reason === 'incomplete_set') {
+        log.tag(acct.name, `relic-set: incomplete (no full set, normal)`);
       } else {
         log.warn(`[${acct.name}] relic-set: ${JSON.stringify(r).slice(0, 120)}`);
       }

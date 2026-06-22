@@ -111,11 +111,11 @@ cp accounts.example.json accounts.json
 | `wallet` | ✅ | — | Phantom private key (any format) |
 | `proxy` | ❌ | `null` | `socks5://user:pass@host:port` or `http://...` |
 | `enabled` | ❌ | `true` | Skip account when `false` |
+| `character.mode` | ❌ | `skip` | `skip` (never touch), `config` (force on every run), `auto` (set first run, then skip) |
 | `character.name` | ❌ | random | Captain name (max 24 chars) |
 | `character.boat` | ❌ | `tugboat` | Boat ID — see [Boats](#boats) |
 | `character.hull` | ❌ | `#a9743f` | Hull color hex (`#RRGGBB`) |
 | `character.accent` | ❌ | `#7fd4e8` | Accent color hex (`#RRGGBB`) |
-| `character.playerId` | ❌ | random | Persistent player ID (stable across restarts) |
 | `claimGrants` | ❌ | `true` | Claim daily grants on startup |
 | `claimRelicSet` | ❌ | `true` | Claim relic set bonus |
 | `magnetMode` | ❌ | `on` | `on` / `off` |
@@ -142,6 +142,46 @@ cp accounts.example.json accounts.json
 The parser rejects invalid lengths and malformed input with clear error messages. Tested with 7 valid formats + 5 negative cases.
 
 > ⚠️ **NEVER commit `accounts.json`** — it contains private keys. Already in `.gitignore`.
+
+### Character setup mode (`character.mode`)
+
+The bot **detects the current character from the server** (via WS `players` broadcast) before doing anything. This avoids the "bot overwrote my carefully-picked boat" problem. Three modes:
+
+| Mode | Behavior | When to use |
+|------|----------|-------------|
+| `skip` *(default)* | Detect only, **never** send `rename`/`appearance` | You manage character in the browser, bot should leave it alone |
+| `config` | Detect, then **force** `accounts.json` values on every run | You want the bot to own character state and sync it to your config |
+| `auto` | Detect, compare to `.hermes/character-<id>.json` cache. **Set on first run only**, then skip until you change config | Idempotent character set — bot sets it once, doesn't touch it again |
+
+**Why not just "always set"?** Server stores character per playerId, but there's no "fetch current" REST endpoint. WS `welcome` doesn't echo character; only `players` broadcasts do. So the bot connects, sends a minimal hello, waits for the first `players` snapshot, reads its own row, and acts.
+
+**Auto-mode state file**: `bot/.hermes/character-<acctId>.json` (gitignored). Delete it to force a re-set on next run.
+
+**Example — keep your browser character**:
+
+```json
+{
+  "name": "main",
+  "wallet": "...",
+  "character": { "mode": "skip" }
+}
+```
+
+**Example — bot owns the character, set once, never touch again**:
+
+```json
+{
+  "name": "alt",
+  "wallet": "...",
+  "character": {
+    "mode": "auto",
+    "name": "Kraken Hunter",
+    "boat": "pirateBoat",
+    "hull": "#c44f4f",
+    "accent": "#f5c542"
+  }
+}
+```
 
 ---
 
