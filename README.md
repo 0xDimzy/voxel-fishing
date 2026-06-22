@@ -136,7 +136,10 @@ cp accounts.example.json accounts.json
 - **Phantom JSON export**: `[12,34,56,...]` (64 bytes)
 - **base58**: `5xK9...` (Phantom "Export Private Key")
 - **base64**: `U3VQRXJ...`
-- **Hex**: `0xab12...`
+- **Hex (with `0x` prefix)**: `0xab12...` — 128 chars = 64 bytes, 64 chars = 32-byte seed
+- **Hex (no prefix)**: `ab12cd...` — same length rules; auto-detected
+
+The parser rejects invalid lengths and malformed input with clear error messages. Tested with 7 valid formats + 5 negative cases.
 
 > ⚠️ **NEVER commit `accounts.json`** — it contains private keys. Already in `.gitignore`.
 
