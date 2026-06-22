@@ -1,0 +1,58 @@
+[
+  {
+    "name": "main",
+    "wallet": "<PHANTOM_PRIVATE_KEY_BASE58_OR_JSON_OR_BASE64>",
+    "proxy": "socks5://user:pass@host:1080",
+    "enabled": true,
+
+    "character": {
+      "name": "Salty Captain",
+      "boat": "sailboat",
+      "hull": "#3f6fa9",
+      "accent": "#7fd4e8",
+      "playerId": null
+    },
+
+    "claimGrants": true,
+    "claimRelicSet": true,
+
+    "magnetMode": "on",
+    "memeMode": "parallel",
+    "memeMaxPerCycle": 1,
+
+    "sellMode": "auto",
+    "sellThreshold": 50,
+    "sellMaxRarity": "rare",
+    "keepMythics": true,
+
+    "consumeAbyssLurker": true,
+    "consumeTargets": ["abysslurker"],
+
+    "sellPets": "off"
+  },
+  {
+    "name": "alt",
+    "wallet": "<ANOTHER_WALLET>",
+    "proxy": null,
+    "enabled": false,
+
+    "character": {
+      "name": "Kraken Hunter",
+      "boat": "pirateBoat",
+      "hull": "#c44f4f",
+      "accent": "#f5c542"
+    },
+
+    "claimGrants": true,
+    "claimRelicSet": true,
+    "magnetMode": "on",
+    "memeMode": "off",
+
+    "sellMode": "auto",
+    "sellMaxRarity": "uncommon",
+    "keepMythics": true,
+
+    "consumeAbyssLurker": true,
+    "sellPets": "auto"
+  }
+]

@@ -1,0 +1,38 @@
+# VoxelFishing Bot — gitignore
+
+# Secrets — NEVER commit
+accounts.json
+tokens.json
+.env
+.env.*
+!.env.example
+
+# Runtime
+*.log
+*.log.*
+logs/
+.cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Local state
+state/
+.wip
+*.pid
+
+# Test artifacts
+/tmp/
+/test-*.mjs
+/test-*.js
+*.test.js
+coverage/
