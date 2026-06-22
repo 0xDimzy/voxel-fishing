@@ -69,6 +69,75 @@ const T = {
   gray: '\x1b[90m',
 };
 
+// === UI helpers (emoji outcomes, color-coded logs) =======================
+// Map API outcome → {emoji, color, label, value}. Keeps log lines scannable.
+const OUTCOME_STYLE = {
+  coins:        { e: '💰', c: 'yellow',   label: 'coins'  },
+  chest:        { e: '🎁', c: 'magenta',  label: 'chest'  },
+  junk:         { e: '🗑️', c: 'gray',     label: 'junk'   },
+  rod:          { e: '🎣', c: 'cyan',     label: 'rod'    },  // magnet-cast rod upgrade
+  rod_upgrade:  { e: '🎣', c: 'cyan',     label: 'rod'    },  // alt name
+  engine:       { e: '⚙️', c: 'cyan',     label: 'engine' },  // magnet engine upgrade
+  fish:         { e: '🐟', c: 'blue',     label: 'fish'   },
+  relic:        { e: '🏆', c: 'magenta',  label: 'relic'  },
+};
+
+function fmtOutcome(r) {
+  const o = r?.outcome || r?.kind || 'unknown';
+  const style = OUTCOME_STYLE[o] || { e: '?', c: 'dim', label: o };
+  const { e, c, label } = style;
+  // Value extraction per outcome
+  let val = '';
+  if (o === 'coins') val = `+${r.coinsAwarded ?? '?'} ${label}`;
+  else if (o === 'chest') val = `+${r.chestCoins ?? r.coinsAwarded ?? '?'} ${label}`;
+  else if (o === 'junk') val = `${label} (${r.junkId ?? '?'})`;
+  else if (o === 'rod' || o === 'rod_upgrade') val = `${label} lvl ${r.rodLevel ?? r.newRodLevel ?? '?'}`;
+  else if (o === 'engine') val = `${label} lvl ${r.engineLevel ?? '?'}`;
+  else if (o === 'fish') val = `${label} (${r.speciesId ?? r.uid?.slice(0, 8) ?? '?'})`;
+  else val = label;
+  const xp = r?.xpAwarded > 0 ? ` ${T.dim}(${r.xpAwarded} xp)${T.reset}` : '';
+  return `${T[c]}${e} ${val}${T.reset}${xp}`;
+}
+
+// Format a full cast line. castType ∈ {'magnet', 'meme'}
+//   🟢 [utama] cycle 3 · magnet #1 → 💰 +23 coins (5 xp)
+//   ⚪ [utama] cycle 3 · meme #1   → ⚠️ 402 insufficient (skip)
+function fmtCastLine(acct, cycle, castType, idx, r) {
+  if (r?._error) {
+    const e = r._error;
+    if (e.status === 402) return `${T.yellow}⚪${T.reset} [${acct}] cycle ${cycle} · ${castType} #${idx} → ${T.yellow}⚠ 402 insufficient (skip)${T.reset}`;
+    if (e.status === 429) return `${T.yellow}⚪${T.reset} [${acct}] cycle ${cycle} · ${castType} #${idx} → ${T.yellow}⚠ 429 rate-limited (slowing)${T.reset}`;
+    return `${T.red}⚪${T.reset} [${acct}] cycle ${cycle} · ${castType} #${idx} → ${T.red}❌ ${e.message}${T.reset}`;
+  }
+  if (!r?.ok && r) {
+    return `${T.yellow}⚪${T.reset} [${acct}] cycle ${cycle} · ${castType} #${idx} → ${T.yellow}⚠ ${r.error || 'failed'}${T.reset}`;
+  }
+  return `${T.green}🟢${T.reset} [${acct}] cycle ${cycle} · ${castType} #${idx} → ${fmtOutcome(r)}`;
+}
+
+// Format a tally line, printed every N cycles. Shows running earnings.
+function fmtTally(acct, tally, cycles, elapsedSec) {
+  const m = Math.floor(elapsedSec / 60);
+  const s = elapsedSec % 60;
+  const time = m > 0 ? `${m}m${s}s` : `${s}s`;
+  const lines = [
+    `${T.cyan}╭─ [${acct}] tally after ${cycles} cycles (${time}) ─────────${T.reset}`,
+    `${T.cyan}│${T.reset} ${T.yellow}💰 ${tally.coins} coins${T.reset}   ${T.blue}⭐ ${tally.xp} xp${T.reset}`,
+    `${T.cyan}│${T.reset} ${T.magenta}🎁 ${tally.chests} chest${T.reset}   ${T.gray}🗑️ ${tally.junk} junk${T.reset}`,
+    `${T.cyan}│${T.reset} ${T.cyan}📈 rod upgrades: ${tally.rodUpgrades}${T.reset}   ${T.dim}⏭ meme-skipped: ${tally.memeSkipped}${T.reset}`,
+    `${T.cyan}╰────────────────────────────────────────────────────────${T.reset}`,
+  ];
+  return lines.join('\n');
+}
+
+// Format end-of-run summary line.
+function fmtEndSummary(acct, tally, cycles, elapsedSec) {
+  const m = Math.floor(elapsedSec / 60);
+  const s = elapsedSec % 60;
+  const time = m > 0 ? `${m}m${s}s` : `${s}s`;
+  return `${T.green}✓${T.reset} [${acct}] finished · ${cycles} cycles · ${time} · ${T.yellow}💰 ${tally.coins} coins${T.reset} · ${T.blue}⭐ ${tally.xp} xp${T.reset} · ${T.magenta}🎁 ${tally.chests} chest${T.reset}`;
+}
+
 const log = {
   info: (msg, c = 'cyan') => console.log(`${T[c]}[i]${T.reset} ${msg}`),
   ok: (msg) => console.log(`${T.green}[✓]${T.reset} ${msg}`),
@@ -305,49 +374,109 @@ async function runAccount(acct) {
   // === Step 3: fish loop ===
   let cycle = 0;
   const startTime = Date.now();
+  const tally = {
+    coins: 0, xp: 0, chests: 0, junk: 0, rodUpgrades: 0, memeSkipped: 0,
+    magnetCasts: 0, memeCasts: 0,
+  };
+  const TALLY_EVERY = 5;
+  const castMode = acct.castMode || 'magnet'; // default: backwards compat
+
+  // Helper: update tally from a cast result
+  function tallyFrom(r, kind) {
+    if (kind === 'magnet') tally.magnetCasts++;
+    else tally.memeCasts++;
+    if (r?._error) {
+      if (r._error.status === 402 || r._error.status === 429) tally.memeSkipped++;
+      return;
+    }
+    tally.coins += r?.coinsAwarded || 0;
+    tally.xp += r?.xpAwarded || 0;
+    if (r?.outcome === 'chest') tally.chests++;
+    if (r?.outcome === 'junk') tally.junk++;
+    if (r?.outcome === 'rod_upgrade' || r?.rodLevel) tally.rodUpgrades++;
+    if (r?.outcome === 'engine' || r?.engineLevel) tally.rodUpgrades++;
+  }
+
+  // Helper: try meme-cast once, returns result or { _error: e }
+  // Some endpoints return body-level errors (e.g. {error:"insufficient_funds"})
+  // with HTTP 200 — convert those to _error so fmtCastLine handles them uniformly.
+  async function tryMemeCastOnce() {
+    try {
+      const r = await api.memeCast();
+      if (r?.error) {
+        // Map body error → synthetic _error matching HTTP semantics
+        if (r.error === 'insufficient_funds') {
+          return { _error: { status: 402, message: `insufficient funds (${r.serverMoney ?? '?'}/${r.required ?? '?'})` } };
+        }
+        if (r.error === 'rate_limited' || r.error === 'slow_down') {
+          return { _error: { status: 429, message: r.error } };
+        }
+        return { _error: { status: 400, message: r.error } };
+      }
+      return r;
+    } catch (e) {
+      return { _error: e };
+    }
+  }
+
+  // Helper: try magnet-cast once, returns result or { _error: e }
+  // Body-level errors (rate_limited comes back as HTTP 200 with
+  // {error:"rate_limited",waitMs:4500}) are converted to _error too.
+  async function tryMagnetCastOnce() {
+    try {
+      const r = await api.magnetCast();
+      if (r?.error === 'rate_limited' || r?.error === 'slow_down') {
+        return { _error: { status: 429, message: `rate limited (wait ${r.waitMs ?? '?'}ms)` } };
+      }
+      if (r?.error) {
+        return { _error: { status: 400, message: r.error } };
+      }
+      return r;
+    } catch (e) {
+      return { _error: e };
+    }
+  }
 
   while (true) {
     cycle++;
     try {
-      // --- 3a: magnet cast ---
-      if (acct.magnetMode !== 'off') {
-        const r = await api.magnetCast();
-        const outcome = r?.outcome || r?.kind || '?';
-        log.tag(acct.name, `cast #${cycle} magnet: outcome=${outcome} ${JSON.stringify(r).slice(0, 120)}`);
-        if (maybeSkip(0.3)) {
-          await actionPause(1500, 4000);
-        }
-      }
-
-      // --- 3b: meme cast (parallel mode, rate-limited) ---
-      if (policy.memeMode === 'parallel') {
-        for (let m = 0; m < policy.memeMaxPerCycle; m++) {
-          try {
-            const r = await api.memeCast();
-            if (r?.rateLimited) {
-              log.warn(`[${acct.name}] meme-cast rate-limited, backing off`);
-              break;
-            }
-            if (r?.insufficientFunds) {
-              log.warn(`[${acct.name}] meme-cast: insufficient funds (server=${r.serverMoney ?? '?'})`);
-              break;
-            }
-            if (r?.ok) {
-              log.tag(acct.name, `meme-cast: amount=${r.amount ?? '?'}`, 'magenta');
-            }
-          } catch (e) {
-            if (e.status === 429) {
-              log.warn(`[${acct.name}] meme-cast 429 — slowing down`);
-              break;
-            }
-            if (e.status === 402) {
-              log.warn(`[${acct.name}] meme-cast 402 — insufficient funds`);
-              break;
-            }
-            log.warn(`[${acct.name}] meme-cast error: ${e.message}`);
-            break;
+      // --- 3a: cast dispatch based on castMode ---
+      //   magnet (default): magnet PRIMARY, meme parallel
+      //   rod            : meme PRIMARY, magnet as fallback when no funds
+      if (castMode === 'rod') {
+        // Rod mode: try meme-cast first (it's the premium fishing action)
+        if (policy.memeMode !== 'off') {
+          for (let m = 0; m < policy.memeMaxPerCycle; m++) {
+            const r = await tryMemeCastOnce();
+            tallyFrom(r, 'meme');
+            console.log(fmtCastLine(acct.name, cycle, 'meme', m + 1, r));
+            if (r._error && (r._error.status === 402 || r._error.status === 429)) break;
+            if (m < policy.memeMaxPerCycle - 1) await shortPause(1500, 3500);
           }
-          if (m < policy.memeMaxPerCycle - 1) await shortPause(1500, 3500);
+        }
+        // Magnet-cast as fallback (or always if no errors above)
+        if (acct.magnetMode !== 'off') {
+          const r = await tryMagnetCastOnce();
+          tallyFrom(r, 'magnet');
+          console.log(fmtCastLine(acct.name, cycle, 'magnet', tally.magnetCasts, r));
+          if (r && !r._error && maybeSkip(0.3)) await actionPause(1500, 4000);
+        }
+      } else {
+        // Magnet mode (default): magnet PRIMARY, meme parallel
+        if (acct.magnetMode !== 'off') {
+          const r = await tryMagnetCastOnce();
+          tallyFrom(r, 'magnet');
+          console.log(fmtCastLine(acct.name, cycle, 'magnet', tally.magnetCasts, r));
+          if (r && !r._error && maybeSkip(0.3)) await actionPause(1500, 4000);
+        }
+        if (policy.memeMode === 'parallel') {
+          for (let m = 0; m < policy.memeMaxPerCycle; m++) {
+            const r = await tryMemeCastOnce();
+            tallyFrom(r, 'meme');
+            console.log(fmtCastLine(acct.name, cycle, 'meme', tally.memeCasts, r));
+            if (r._error && (r._error.status === 402 || r._error.status === 429)) break;
+            if (m < policy.memeMaxPerCycle - 1) await shortPause(1500, 3500);
+          }
         }
       }
 
@@ -429,6 +558,12 @@ async function runAccount(acct) {
       // Exit if --once
       if (FLAGS.once && cycle >= 3) break;
 
+      // Per-cycle header (lightweight, shows mode + cycle in/out context)
+      if (cycle % TALLY_EVERY === 0) {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        console.log(fmtTally(acct.name, tally, cycle, elapsed));
+      }
+
       // Humanize pause: 3-9s, occasionally 12s+
       const pause = maybeSkip(0.08)
         ? await actionPause(10000, 16000)
@@ -445,7 +580,9 @@ async function runAccount(acct) {
   }
 
   const elapsed = Math.round((Date.now() - startTime) / 1000);
-  log.ok(`[${acct.name}] finished after ${elapsed}s (${cycle} cycles)`);
+  console.log(fmtEndSummary(acct.name, tally, cycle, elapsed));
+  // Final tally block (always shown at end, even for short runs)
+  console.log(fmtTally(acct.name, tally, cycle, elapsed));
 }
 
 // ---------- main ----------
