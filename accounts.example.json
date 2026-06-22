@@ -1,53 +1,35 @@
 // =============================================================================
-//  VoxelFishing Bot — accounts.example.json
-//  TEMPLATE — copy to accounts.json and edit. JSON5 syntax (// comments OK).
+//  accounts.example.json — TEMPLATE (rename to accounts.json, edit, run bot)
+// =============================================================================
+//  Butuh setup cepet?    $ cp accounts.example.json accounts.json
+//                        $ npm run add-account    (wizard, paste wallet aman)
 //
-//  ⭐ RECOMMENDED: use the wizard instead of editing this file by hand.
-//     $ npm run add-account
-//     (or:  npm run add-account -- --name alt --wallet 5xK9... --cast-mode rod)
-//
-//  This file documents ALL possible fields. Most accounts only need 4 lines:
-//     { "name": "...", "wallet": "...", "proxy": null, "enabled": true }
-//
-//  Other fields have sensible defaults (see lib/accounts.js).
-//  Override only what you want different.
+//  Format: JSON5 (// comments + trailing commas OK).
+//  4 field wajib: name, wallet, proxy, enabled. Sisanya ada default sane.
+//  Lihat README.md bagian "Configuration" untuk semua field advanced.
 // =============================================================================
 
 [
-  // ── Minimal account (works for most users) ───────────────────────────────
   {
-    "name": "main",
-    "wallet": "<YOUR_PHANTOM_PRIVATE_KEY>",     // any format — base58/JSON/base64/hex
-    "proxy": null,                                // socks5:// or http:// — null for direct
+    "name": "main",                                   // bebas, harus unik
+    "wallet": "",                                     // paste private key Phantom
+    "proxy": null,                                    // null = direct | "socks5://..." | "http://..."
     "enabled": true,
-    // "castMode": "magnet",                      // magnet (default) | rod — see README
-  },
+    "castMode": "magnet",                             // "magnet" (default) | "rod"
 
-  // ── Account with full overrides (commented — remove // to enable) ──────
-  // {
-  //   "name": "alt",
-  //   "wallet": "<ANOTHER_PHANTOM_PRIVATE_KEY>",
-  //   "proxy": "socks5://user:pass@host:1080",
-  //   "enabled": true,
-  //
-  //   "claimGrants": true,           // claim daily grant on sign-in
-  //   "claimRelicSet": true,         // claim relic set bonus
-  //   "castMode": "rod",             // magnet | rod (rod = meme-first, magnet fallback)
-  //   "magnetMode": "on",            // on | off
-  //   "memeMode": "parallel",        // off | parallel | sequential
-  //   "memeMaxPerCycle": 1,
-  //   "sellMode": "off",             // off | on — auto-sell fish by rarity
-  //   "sellThreshold": 50,           // keep this many fish before selling
-  //   "sellMaxRarity": "rare",       // common | uncommon | rare | epic | legendary | mythic
-  //   "keepMythics": true,           // always keep mythic fish
-  //   "consumeAbyssLurker": true,    // auto-consume for Abyssal Aura
-  //   "sellPets": "off",             // off | auto
-  //
-  //   "character": {                 // see README "Character setup mode"
-  //     "mode": "skip",              // skip | config | auto
-  //     "boat": "sailboat",          // see README "Boats" for full list
-  //     "hull": "#3f6fa9",           // #RRGGBB
-  //     "accent": "#7fd4e8"          // #RRGGBB
-  //   }
-  // }
+    // ── Advanced (uncomment untuk aktifin) ──────────────────────────────
+    // "claimGrants": true,                            // klaim daily grant pas login
+    // "sellMode": "auto",                             // "auto" | "threshold" | "off"
+    // "sellThreshold": 50,                            // ikan disimpan sebelum dijual
+    // "memeMode": "off",                              // "off" | "parallel" | "sequential"
+    // "character": {
+    //   "mode": "skip",                               // "skip" | "config" | "auto"
+    //   "boat": "tugboat",                            // lihat lib/character.js
+    //   "hull": "#a9743f",                            // warna hull  #RRGGBB
+    //   "accent": "#7fd4e8"                           // warna accent #RRGGBB
+    // }
+  }
+
+  // Tambah akun ke-2:  paste blok di atas, ganti "name" + "wallet".
+  // Atau pake wizard:  $ npm run add-account
 ]
