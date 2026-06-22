@@ -1,8 +1,18 @@
-# VoxelFishing Bot v2
+# VoxelFishing Bot v2.1
 
-Multi-account automation for [voxelfishing.com](https://voxelfishing.com) — character setup, magnet/meme casting, smart fish selling, pet management. Privy SIWS sign-in via Phantom wallet, with per-account SOCKS5/HTTP proxy + humanized timing to avoid detection.
+Multi-account automation for [voxelfishing.com](https://voxelfishing.com) — Privy SIWS sign-in via Phantom, **2 cast modes** (magnet / rod), smart fish selling, pet management, REST-based character detection. Per-account SOCKS5/HTTP proxy + humanized timing to avoid detection.
 
 > **Disclaimer**: Use at your own risk. The author is not responsible for any bans or losses. This bot is for educational purposes — respect the game's TOS.
+
+---
+
+## What's new in v2.1
+
+- **Cast mode switch** — `castMode: "magnet" | "rod"` per account. `rod` flips priority (meme-cast first, magnet as fallback when 402).
+- **JSON5 `accounts.json`** — full `//` comment support. Surgical writeback via `jsonc-parser` preserves comments through character auto-detection.
+- **UI overhaul** — colored emoji outcomes (`💰 coins`, `🎁 chest`, `🗑️ junk`, `📈 rod lvl 2`), per-cycle tally box, end-of-run summary.
+- **Body-level error handling** — `{error:"insufficient_funds"}` and `{error:"rate_limited"}` (HTTP 200 with error in body) now caught cleanly.
+- **REST-first character detection** — `skip` mode reads `/api/me/save.boatAppearance` via REST. No WS hello, no name overwrite. `config`/`auto` modes still use WS `applyCharacter`.
 
 ---
 
@@ -14,14 +24,16 @@ Multi-account automation for [voxelfishing.com](https://voxelfishing.com) — ch
 | Privy SIWS sign-in (Phantom) | ✅ |
 | Token cache (`tokens.json`) | ✅ |
 | Per-account SOCKS5 / HTTP proxy | ✅ |
-| Character setup (name + boat + 2 colors) via WS | ✅ v2 |
+| **2 cast modes** (magnet / rod) | ✅ v2.1 |
+| **REST character detection** (no WS overwrite) | ✅ v2.1 |
 | Daily grants claim | ✅ |
-| Relic set bonus claim | ✅ v2 |
+| Relic set bonus claim | ✅ |
 | Magnet cast loop | ✅ |
-| Meme cast (parallel secondary) | ✅ v2 |
-| Smart fish selling (rarity filter, keep mythics) | ✅ v2 |
-| Auto-consume targets (Abyss Lurker → Abyssal Aura) | ✅ v2 |
-| Pet sell | ✅ v2 |
+| Meme cast (primary or parallel) | ✅ |
+| Smart fish selling (rarity filter, keep mythics) | ✅ |
+| Auto-consume targets (Abyss Lurker → Abyssal Aura) | ✅ |
+| Pet sell | ✅ |
+| **Colored emoji UI + tally + end summary** | ✅ v2.1 |
 | Humanize timing (gaussian + jitter) | ✅ |
 
 ---
@@ -32,22 +44,22 @@ Multi-account automation for [voxelfishing.com](https://voxelfishing.com) — ch
 - **Auth**: Privy SIWS (Sign-In With Solana) via Phantom
 - **App ID**: `cmpxg3h0o00400dla4si4jp4x` (extracted from voxelfishing.com bundle)
 - **Game endpoints**: `https://voxelfishing.com/api/...` (REST, requires Bearer token)
-- **Realtime**: `wss://voxelfishing.com/api/ws` (character setup + state sync)
+- **Realtime**: `wss://voxelfishing.com/api/ws` (character setup + state sync, used in `config`/`auto` modes only)
 
 ### Game endpoints covered (`lib/api.js`)
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | `POST` | `/api/me/magnet-cast` | Server-side cast with magnet |
-| `POST` | `/api/me/meme-cast` | Meme token cast |
-| `GET` | `/api/me/meme-fish` | Meme fish inventory |
+| `POST` | `/api/me/meme-cast` | Meme token cast (returns body-level errors: `insufficient_funds`, `rate_limited`) |
+| `GET`  | `/api/me/meme-fish` | Meme fish inventory |
 | `POST` | `/api/me/grants/claim` | Daily grant claim |
 | `POST` | `/api/me/relic-set-claim` | Relic set bonus |
 | `POST` | `/api/me/fish/sell` | Sell caught fish (max 500/call) |
 | `POST` | `/api/me/fish/consume` | Consume fish (e.g. Abyss Lurker → Abyssal Aura) |
 | `POST` | `/api/me/pet/sell` | Sell pet |
 | `POST` | `/api/me/shop/buy` | Buy pet eggs |
-| `GET` | `/api/me/save` | Player save data + inventory |
+| `GET`  | `/api/me/save` | Player save data + `boatAppearance` |
 
 ### SIWS Message Format (Privy-specific)
 
@@ -76,16 +88,16 @@ Source: `@privy-io/js-sdk-core/dist/esm/solana/createSiwsMessage.mjs`.
 
 ```
 voxelfishing-bot/
-├── bot.js                 # v1: minimal loop (cast → sell → save)
-├── bot-v2.js              # v2: full feature set (character, meme, smart sell)
+├── bot.js                 # v1: minimal loop (cast → sell → save) — legacy
+├── bot-v2.js              # v2: full feature set (character, meme, smart sell, UI)
 ├── lib/
 │   ├── auth.js            # Privy SIWS sign-in flow
 │   ├── api.js             # Thin REST wrapper around game endpoints
-│   ├── character.js       # Boat/color allowlist + WebSocket character setup
+│   ├── character.js       # Boat/color allowlist + REST & WS character setup
 │   ├── wallet.js          # Multi-format Phantom key parser
-│   ├── accounts.js        # Load accounts.json + persist tokens.json
+│   ├── accounts.js        # JSON5 load + surgical jsonc-parser writeback
 │   └── humanize.js        # Gaussian timing + jitter helpers
-├── accounts.example.json  # Template (copy to accounts.json)
+├── accounts.example.json  # JSON5 template (commit-safe) — copy to accounts.json
 ├── package.json
 ├── package-lock.json
 ├── .gitignore             # Excludes accounts.json + tokens.json
@@ -101,33 +113,38 @@ cd /root/voxelfishing-bot
 npm install
 cp accounts.example.json accounts.json
 # Edit accounts.json with your Phantom private keys + proxies
+node bot-v2.js --once        # smoke test (3 cycles, exit)
 ```
+
+`accounts.json` accepts **JSON5** syntax — use `//` comments freely. Comments are preserved through character writeback (surgical edits via `jsonc-parser`).
 
 ### `accounts.json` fields
 
 | Field | Required | Default | Notes |
 |-------|----------|---------|-------|
 | `name` | ✅ | — | Unique label for logs |
-| `wallet` | ✅ | — | Phantom private key (any format) |
+| `wallet` | ✅ | — | Phantom private key (any format — see [Wallet formats](#wallet-formats-accepted)) |
 | `proxy` | ❌ | `null` | `socks5://user:pass@host:port` or `http://...` |
 | `enabled` | ❌ | `true` | Skip account when `false` |
-| `character.mode` | ❌ | `skip` | `skip` (never touch), `config` (force on every run), `auto` (set first run, then skip) |
-| `character.name` | ❌ | random | Captain name (max 24 chars) |
-| `character.boat` | ❌ | `tugboat` | Boat ID — see [Boats](#boats) |
-| `character.hull` | ❌ | `#a9743f` | Hull color hex (`#RRGGBB`) |
-| `character.accent` | ❌ | `#7fd4e8` | Accent color hex (`#RRGGBB`) |
 | `claimGrants` | ❌ | `true` | Claim daily grants on startup |
 | `claimRelicSet` | ❌ | `true` | Claim relic set bonus |
+| **`castMode`** | ❌ | `magnet` | `magnet` / `rod` — see [Cast modes](#cast-modes) |
 | `magnetMode` | ❌ | `on` | `on` / `off` |
-| `memeMode` | ❌ | `off` | `off` / `parallel` (secondary cast loop) |
+| `memeMode` | ❌ | `off` | `off` / `parallel` / `sequential` |
 | `memeMaxPerCycle` | ❌ | `1` | Max meme casts per main cycle |
-| `sellMode` | ❌ | `auto` | `auto` / `threshold` / `off` |
-| `sellThreshold` | ❌ | `50` | Fish count threshold for `threshold` mode |
-| `sellMaxRarity` | ❌ | `rare` | Top rarity to sell (`common`/`uncommon`/`rare`/`epic`/`mythical`/`legendary`/`off`) |
-| `keepMythics` | ❌ | `true` | Defense: never sell mythical+ fish (recommended) |
+| `sellMode` | ❌ | `off` | `on` / `off` |
+| `sellThreshold` | ❌ | `50` | Fish count threshold |
+| `sellMaxRarity` | ❌ | `rare` | Top rarity to sell (`common`/`uncommon`/`rare`/`epic`/`legendary`/`mythic`) |
+| `keepMythics` | ❌ | `true` | Never sell mythics (recommended) |
 | `consumeAbyssLurker` | ❌ | `true` | Auto-consume Abyss Lurker for Abyssal Aura |
 | `consumeTargets` | ❌ | `["abysslurker"]` | List of speciesIds to auto-consume |
 | `sellPets` | ❌ | `off` | `off` / `auto` |
+| `character.mode` | ❌ | `skip` | `skip` / `config` / `auto` — see [Character setup mode](#character-setup-mode) |
+| `character.boat` | ❌ | `tugboat` | Boat ID — see [Boats](#boats) |
+| `character.hull` | ❌ | `#a9743f` | Hull color hex (`#RRGGBB`) |
+| `character.accent` | ❌ | `#7fd4e8` | Accent color hex (`#RRGGBB`) |
+
+> ⚠️ **NEVER commit `accounts.json`** — it contains private keys. Already in `.gitignore`.
 
 ### Wallet formats accepted
 
@@ -141,73 +158,76 @@ cp accounts.example.json accounts.json
 
 The parser rejects invalid lengths and malformed input with clear error messages. Tested with 7 valid formats + 5 negative cases.
 
-> ⚠️ **NEVER commit `accounts.json`** — it contains private keys. Already in `.gitignore`.
+---
 
-### Character setup mode (`character.mode`)
+## Cast modes
 
-The bot **detects the current character from the server** (via WS `players` broadcast) before doing anything. This avoids the "bot overwrote my carefully-picked boat" problem. Three modes:
+`castMode` switches which cast is **PRIMARY** each cycle:
 
-| Mode | Behavior | When to use |
-|------|----------|-------------|
-| `skip` *(default)* | Detect only, **never** send `rename`/`appearance` | You manage character in the browser, bot should leave it alone |
-| `config` | Detect, then **force** `accounts.json` values on every run | You want the bot to own character state and sync it to your config |
-| `auto` | Detect, compare to `.hermes/character-<id>.json` cache. **Set on first run only**, then skip until you change config | Idempotent character set — bot sets it once, doesn't touch it again |
+| Mode | Magnet-cast | Meme-cast | When to use |
+|------|-------------|-----------|-------------|
+| **`magnet`** (default) | Primary (free) | Parallel (paid, secondary) | You want to build wealth on the free cast, occasionally spend on memes |
+| **`rod`** | Fallback (when 402) | Primary (paid) | You have funds to burn and want to chase meme-fish |
 
-**Why not just "always set"?** Server stores character per playerId, but there's no "fetch current" REST endpoint. WS `welcome` doesn't echo character; only `players` broadcasts do. So the bot connects, sends a minimal hello, waits for the first `players` snapshot, reads its own row, and acts.
+### Example cycle — `castMode: "magnet"`
 
-**Auto-mode state file**: `bot/.hermes/character-<acctId>.json` (gitignored). Delete it to force a re-set on next run.
-
-**Example — keep your browser character**:
-
-```json
-{
-  "name": "main",
-  "wallet": "...",
-  "character": { "mode": "skip" }
-}
+```
+🟢 [utama] cycle 1 · magnet #1 → 💰 +25 coins (5 xp)
+⚪ [utama] cycle 1 · meme #1 → ⚠ 402 insufficient (skip)
+🟢 [utama] cycle 2 · magnet #2 → 🎁 +112 chest (30 xp) [rare]
+🟢 [utama] cycle 2 · meme #2 → 🟢 23 success
+🟢 [utama] cycle 3 · magnet #3 → 🗑️ junk (car_bumper)
+⚪ [utama] cycle 3 · meme #3 → ⚠ 402 insufficient (skip)
 ```
 
-**Example — bot owns the character, set once, never touch again**:
+### Example cycle — `castMode: "rod"`
 
-```json
-{
-  "name": "alt",
-  "wallet": "...",
-  "character": {
-    "mode": "auto",
-    "name": "Kraken Hunter",
-    "boat": "pirateBoat",
-    "hull": "#c44f4f",
-    "accent": "#f5c542"
-  }
-}
 ```
+🟢 [utama] cycle 1 · meme #1 → ⚠ 402 insufficient (skip)
+🟢 [utama] cycle 1 · magnet #1 → 💰 +25 coins (5 xp) [fallback]
+🟢 [utama] cycle 2 · meme #2 → 🟢 23 success
+🟢 [utama] cycle 2 · magnet #2 → 💰 +18 coins (5 xp) [fallback]
+```
+
+### End-of-run summary (both modes)
+
+```
+✓ [utama] finished · 3 cycles · 13s · 💰 19 coins · ⭐ 15 xp
+╭─ [utama] tally after 3 cycles (13s) ──────────
+│ 💰 19 coins   ⭐ 15 xp
+│ 🎁 0 chest   🗑️ 2 junk
+│ 📈 0 rod upgrades   ⚠ 0 meme skipped
+╰──────────────────────────────────────────────
+```
+
+---
+
+## Character setup mode (`character.mode`)
+
+| Mode | Detection | Behavior | When to use |
+|------|-----------|----------|-------------|
+| **`skip`** *(default)* | REST `/api/me/save.boatAppearance` | **Never** send `rename`/`appearance` | You manage character in browser, bot leaves it alone |
+| `config` | REST first, then WS `applyCharacter` | Force `accounts.json` values every run | You want the bot to own character state and sync to your config |
+| `auto` | REST first, then WS `applyCharacter` | Set once from cache, then skip until you change config | Idempotent set — bot sets once, doesn't touch again |
+
+**Why REST for detection?** The `boatAppearance` lives in `/api/me/save` (server source of truth). Reading it via REST is reliable + cheap. WS `players` broadcasts only happen on connect, and the WS `hello` message doesn't echo character state. So `skip` mode uses REST to detect, and never opens WS at all (saves the 1s WS handshake + 100% avoids accidental name/boat overwrite).
+
+**Auto-mode state file**: `.hermes/character-<id>.json` (gitignored). Delete to force a re-set on next run.
+
+> **Note on `name`**: The character name lives in WS hello state (NOT in `saveData`). The bot cannot reliably read/write the name without overwriting it. **Set name in browser, not in `accounts.json`.**
 
 ---
 
 ## Run
 
-### v1 (minimal loop)
-
 ```bash
-npm start                       # run all enabled accounts in parallel
-npm run auth                    # sign-in only, write tokens.json, exit
-node bot.js --account main      # single account
-node bot.js --once              # 3 cycles then exit (smoke test)
-node bot.js --no-proxy          # ignore account.proxy
-node bot.js --verbose           # log all API calls
+npm run start:v2              # run all enabled accounts (v2)
+npm run auth:v2               # sign-in only, write tokens.json, exit
+npm run once                  # 3 cycles per account, then exit (smoke test)
+npm run account -- main       # run single account by name
 ```
 
-### v2 (full feature set — recommended)
-
-```bash
-npm run start:v2                # run all enabled accounts (v2)
-npm run auth:v2                 # sign-in only (v2)
-npm run once                    # 3 cycles then exit
-npm run account -- main         # single account by name
-```
-
-### CLI flags (work for both v1 and v2)
+### CLI flags
 
 | Flag | Effect |
 |------|--------|
@@ -249,7 +269,7 @@ npm run account -- main         # single account by name
 | `spiderBoat` | Spider-Man | reward-only |
 | `squidBoat` | Kraken's Vessel | reward-only |
 
-> **Validation**: The server validates `boatType` against the allowlist and rejects unknown IDs. Hex colors must match `/^#[0-9a-fA-F]{6}$/`. Names are auto-truncated to 24 chars.
+> **Validation**: The server validates `boatType` against the allowlist and rejects unknown IDs. Hex colors must match `/^#[0-9a-fA-F]{6}$/`.
 
 ---
 
@@ -268,12 +288,12 @@ The frontend picker offers these 10 hull + 10 accent colors, but the server acce
 The bot protects against accidentally selling your best fish:
 
 1. **Rarity ceiling** (`sellMaxRarity`): fish above this tier are never sold.
-2. **Mythic defense** (`keepMythics`, default `true`): mythical+ fish are NEVER sold, regardless of ceiling. (You want to **consume** these for auras, not sell.)
+2. **Mythic defense** (`keepMythics`, default `true`): mythic+ fish are NEVER sold, regardless of ceiling. (You want to **consume** these for auras, not sell.)
 3. **Filter order**: `keepMythics` check first, then ceiling check, then sell.
 
 Example policy `{sellMaxRarity: "rare", keepMythics: true}`:
 - ✅ Sells: common, uncommon, rare
-- ❌ Skips: epic, mythical, legendary (both filters)
+- ❌ Skips: epic, mythic, legendary (both filters)
 - 🌟 Consumed separately (Abyss Lurker → Abyssal Aura)
 
 To sell literally everything except mythics:
@@ -302,6 +322,22 @@ To avoid bot detection, the bot:
 
 ## Verified (2026-06-22)
 
+### v2.1 cast mode + UI smoke test
+
+```
+✓ accounts.js switched to JSON5 + jsonc-parser surgical writeback
+✓ castMode=magnet — backward compat, magnet PRIMARY, meme parallel
+✓ castMode=rod — meme PRIMARY, magnet fallback on 402
+✓ UI: emoji outcomes, per-cycle tally, end summary
+✓ Body-level errors (insufficient_funds, rate_limited) handled
+```
+
+### v2 character setup (REST + WS)
+
+- **`skip` mode** (default): REST `/api/me/save.boatAppearance` → read boat/hull/accent. **No WS** → no name overwrite.
+- **`config`/`auto` modes**: REST detect first, then WS `applyCharacter` if mismatch.
+- See [Character setup mode](#character-setup-mode-charactermode) for details.
+
 ### v1 smoke test (parallel sign-in)
 
 ```
@@ -317,18 +353,6 @@ To avoid bot detection, the bot:
 [✓] [acc2] finished after 16s (3 cycles)
 ```
 
-### v2 character setup (reverse-engineered from bundle)
-
-The character (name + boat + 2 colors) is set via WebSocket on `wss://voxelfishing.com/api/ws`. The bot:
-
-1. Opens WS with `SocksProxyAgent` (if proxy configured)
-2. Sends `{t: "hello", ..., authToken: <JWT>}` to authenticate
-3. Sends `{t: "rename", name}` to set the captain name
-4. Sends `{t: "appearance", boatType, hull, accent}` to set boat + colors
-5. Closes the connection
-
-Idempotent — safe to run on every startup.
-
 ---
 
 ## Notes & gotchas
@@ -336,9 +360,15 @@ Idempotent — safe to run on every startup.
 - **NEVER generates new wallets** — uses only the private keys you provide.
 - **Token cache** (`tokens.json`): if a saved token still passes probe, the bot reuses it. Otherwise re-signs in.
 - **Per-account proxy**: SOCKS5 via `socks-proxy-agent`, HTTP/HTTPS via undici `ProxyAgent`.
-- **Errors**: `401` → re-sign-in next cycle. Network errors → 15-30s backoff.
+- **Errors**:
+  - `401` → re-sign-in next cycle.
+  - `402` (meme-cast) → fall back to magnet (rod mode) or skip (magnet mode).
+  - `429` → slow down (5-10s extra pause).
+  - Body-level `{error:"insufficient_funds"}` (HTTP 200) → same as 402.
+  - Body-level `{error:"rate_limited"}` with `waitMs` → wait that long.
+  - Network errors → 15-30s backoff.
 - **The 3D cast (mouse click on canvas)** cannot be done server-side — only the server-validated `magnet-cast` and inventory actions are automatable from Node. To automate the visual cast, use a browser/headless runner (Tampermonkey userscript or Puppeteer).
-- **The game frontend caches character state in `localStorage`** under key `voxel-ocean-fishing-boat-v1`. The server is the source of truth for other players; bot character setup writes via WS regardless.
+- **The game frontend caches character state in `localStorage`** under key `voxel-ocean-fishing-boat-v1`. The server is the source of truth for other players; bot character setup writes via WS only in `config`/`auto` modes.
 
 ---
 

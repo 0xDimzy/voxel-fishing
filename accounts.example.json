@@ -1,60 +1,102 @@
+// ============================================================================
+//  VoxelFishing Bot v2 — accounts.example.json
+//  TEMPLATE — copy to accounts.json and edit. JSON5 syntax (// comments OK).
+//
+//  IMPORTANT: This example is committed to git. Real accounts.json is gitignored.
+// ============================================================================
+
 [
   {
+    // ── Identity ────────────────────────────────────────────────────────────
+    // REQUIRED. Unique label used in logs (e.g. "[main] starting").
     "name": "main",
-    "wallet": "<PHANTOM_PRIVATE_KEY_BASE58_OR_JSON_OR_BASE64>",
+
+    // REQUIRED. Solana private key. Wallet parser (lib/wallet.js) auto-detects:
+    //   - base58 (Phantom "Export Private Key")
+    //   - JSON array  (Phantom export JSON)
+    //   - base64
+    //   - hex  with 0x prefix  (e.g. 0xab12cd...)
+    //   - hex  no prefix       (e.g. ab12cd...)
+    "wallet": "<YOUR_PHANTOM_PRIVATE_KEY>",
+
+    // OPTIONAL. SOCKS5 or HTTP proxy URL, or null for direct connection.
     "proxy": "socks5://user:pass@host:1080",
+
+    // OPTIONAL. false = skip this account entirely.
     "enabled": true,
 
-    "character": {
-      "mode": "skip",
-      "name": "Salty Captain",
-      "boat": "sailboat",
-      "hull": "#3f6fa9",
-      "accent": "#7fd4e8",
-      "playerId": null
-    },
-
+    // ── Daily claims (run on every sign-in) ────────────────────────────────
     "claimGrants": true,
     "claimRelicSet": true,
 
+    // ── Cast mode (PRIMARY fishing strategy) ───────────────────────────────
+    //   "magnet" (default) — magnet-cast PRIMARY, meme-cast parallel
+    //   "rod"              — meme-cast PRIMARY, magnet-cast as fallback
+    //                        when insufficient funds
+    "castMode": "magnet",
+
+    // ── Magnet-cast (free, primary income in magnet mode) ──────────────────
     "magnetMode": "on",
+
+    // ── Meme-cast (costs coins, requires funds) ────────────────────────────
     "memeMode": "parallel",
     "memeMaxPerCycle": 1,
 
-    "sellMode": "auto",
+    // ── Smart sell (auto-sell fish by rarity) ──────────────────────────────
+    "sellMode": "off",
     "sellThreshold": 50,
     "sellMaxRarity": "rare",
     "keepMythics": true,
 
+    // ── Consume fish/pets for auras ────────────────────────────────────────
     "consumeAbyssLurker": true,
-    "consumeTargets": ["abysslurker"],
+    "consumeTargets": [
+      "abysslurker",
+    ],
 
-    "sellPets": "off"
-  },
-  {
-    "name": "alt",
-    "wallet": "<ANOTHER_WALLET>",
-    "proxy": null,
-    "enabled": false,
+    // ── Pet auto-sell ──────────────────────────────────────────────────────
+    "sellPets": "off",
 
+    // ── Character (set once via browser, bot respects it) ──────────────────
     "character": {
+      //   "skip"   (default) — never touch server character
+      //   "config"          — force character from this file every run
+      //   "auto"            — set once from config, then skip
       "mode": "skip",
-      "name": "Kraken Hunter",
-      "boat": "pirateBoat",
-      "hull": "#c44f4f",
-      "accent": "#f5c542"
+
+      // Boat ID — fishingBoat, tugboat, wifBoat, etc.
+      // See lib/character.js for the full allowlist of 26 boats.
+      "boat": "sailboat",
+
+      // Hull color hex (#RRGGBB).
+      "hull": "#3f6fa9",
+
+      // Accent color hex (#RRGGBB).
+      "accent": "#7fd4e8",
+
+      // NOTE: Name lives in WS hello state (NOT in saveData).
+      // Bot cannot reliably read/write it without overwriting.
+      // Set name in browser, not here.
     },
+  },
 
-    "claimGrants": true,
-    "claimRelicSet": true,
-    "magnetMode": "on",
-    "memeMode": "off",
-
-    "sellMode": "auto",
-    "sellMaxRarity": "uncommon",
-    "keepMythics": true,
-
-    "consumeAbyssLurker": true,
-    "sellPets": "auto"
-  }
+  // ── Second account example (commented out — remove // to enable) ─────────
+  // {
+  //   "name": "alt",
+  //   "wallet": "<ANOTHER_WALLET>",
+  //   "proxy": null,
+  //   "enabled": false,
+  //
+  //   "castMode": "rod",            // <-- try rod mode on this account
+  //   "magnetMode": "on",
+  //   "memeMode": "parallel",
+  //   "memeMaxPerCycle": 2,
+  //
+  //   "character": {
+  //     "mode": "skip",
+  //     "boat": "pirateBoat",
+  //     "hull": "#c44f4f",
+  //     "accent": "#f5c542"
+  //   }
+  // }
 ]
