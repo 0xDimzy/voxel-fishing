@@ -236,16 +236,20 @@ async function runAccount(acct) {
 
     // === Writeback: in skip mode, persist the detected character to
     // accounts.json so the user's config reflects what the server has. ===
+    // NOTE: REST /api/me/save returns boat/hull/accent only (name is in WS
+    // hello state). Don't overwrite accounts.json.name with null — keep
+    // whatever the user already has there (or leave it unset).
     if (mode === 'skip' && r.detected) {
       try {
-        updateAccountCharacter(acct.name, {
+        const wb = {
           mode: 'skip',
-          name: r.detected.name,
           boat: r.detected.boatId,
           hull: r.detected.hull,
           accent: r.detected.accent,
-        });
-        log.tag(acct.name, `accounts.json updated with detected character`);
+        };
+        if (r.detected.name) wb.name = r.detected.name;
+        updateAccountCharacter(acct.name, wb);
+        log.tag(acct.name, `accounts.json updated with detected character (boat=${wb.boat}, hull=${wb.hull}, accent=${wb.accent}${r.detected.name ? `, name=${wb.name}` : ', name preserved'})`);
       } catch (e) {
         log.warn(`[${acct.name}] accounts.json writeback failed: ${e.message}`);
       }
