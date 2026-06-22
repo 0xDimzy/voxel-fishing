@@ -15,7 +15,11 @@
     "wallet": "",                                     // paste private key Phantom
     "proxy": null,                                    // null = direct | "socks5://..." | "http://..."
     "enabled": true,
-    "castMode": "magnet",                             // "magnet" (default) | "rod"
+    "castModes": ["magnet", "meme"],                    // ARRAY — bot does each per cycle
+                                                     // allowed: "magnet", "meme" (+ "rod" alias)
+                                                     // 1 mode   = ["magnet"]        (magnet only)
+                                                     // 2 modes  = ["magnet", "meme"] (magnet first, then paid meme)
+                                                     // meme-only = ["meme"]          (paid only, no magnet)
 
     // ── Advanced (uncomment untuk aktifin) ──────────────────────────────
     // "claimGrants": true,                            // klaim daily grant pas login

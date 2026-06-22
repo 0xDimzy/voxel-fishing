@@ -5,7 +5,7 @@
 //   npm run accounts -- --json          # JSON output (for scripts)
 //   npm run accounts -- --no-tokens     # skip token-status check
 //
-// Columns: # | name | enabled | castMode | memeMode | proxy | token | wallet
+// Columns: # | name | enabled | castModes | memeMode | proxy | token | wallet
 
 import { loadAccounts, loadTokens, PATHS } from '../lib/accounts.js';
 import fs from 'fs';
@@ -33,7 +33,7 @@ if (asJson) {
   console.log(JSON.stringify(accounts.map((a) => ({
     name: a.name,
     enabled: a.enabled,
-    castMode: a.castMode,
+    castModes: a.castModes || (a.castMode ? [a.castMode] : ['magnet']),
     magnetMode: a.magnetMode,
     memeMode: a.memeMode,
     sellMode: a.sellMode,
@@ -53,7 +53,7 @@ if (accounts.length === 0) {
 console.log(`${T.cyan}=== VoxelFishing: ${accounts.length} account(s) ===${T.reset}\n`);
 
 const header = ['#', 'name', 'enabled', 'cast', 'meme', 'proxy', 'token', 'wallet'];
-const widths = [3, 14, 7, 8, 10, 22, 5, 14];
+const widths = [3, 14, 7, 12, 10, 22, 5, 14];
 const pad = (s, w) => String(s ?? '—').padEnd(w).slice(0, w);
 
 console.log(T.dim + header.map((h, i) => pad(h, widths[i])).join('  ') + T.reset);
@@ -73,7 +73,7 @@ for (let i = 0; i < accounts.length; i++) {
     pad(i + 1, widths[0]),
     enabledColor + pad(a.name, widths[1]) + T.reset,
     pad(a.enabled ? '✓' : '·', widths[2]),
-    pad(a.castMode || 'magnet', widths[3]),
+    pad(a.castModes?.join('+') || 'magnet', widths[3]),
     pad(a.memeMode || 'off', widths[4]),
     pad(proxy, widths[5]),
     tokColor + pad(tokChar, widths[6]) + T.reset,

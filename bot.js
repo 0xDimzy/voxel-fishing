@@ -203,66 +203,85 @@ async function runAccount(acct) {
   // Step 3: fishing loop
   let cycle = 0;
   const startedAt = Date.now();
-  const tally = { fish: 0, coins: 0, xp: 0, chests: 0, junk: 0, rodUpgrades: 0 };
-  info(acct.name, `🎣 mulai fishing loop (target: jual kalo ikan >= ${SELL_THRESHOLD})`);
+  const tally = { fish: 0, coins: 0, xp: 0, chests: 0, junk: 0, rodUpgrades: 0, casts: 0 };
+  const castModes = acct.castModes || ['magnet'];  // backward compat: castMode → castModes
+  info(acct.name, `🎣 mulai fishing loop (modes: ${castModes.join('+')}, target: jual kalo ikan >= ${SELL_THRESHOLD})`);
+
+  // Helper: process a cast response into a per-outcome line + update tally
+  function processCast(r, modeLabel) {
+    const outcome = r?.outcome || r?.kind || 'unknown';
+    const coins = r?.coinsAwarded || 0;
+    const xp = r?.xpAwarded || 0;
+    const xpStr = xp > 0 ? ` +${xp} XP` : '';
+    tally.casts++;
+    let line = '';
+    if (outcome === 'fish') {
+      const id = r.speciesId || r.uid?.slice(0, 8) || '?';
+      tally.fish++;
+      tally.coins += coins;
+      tally.xp += xp;
+      line = `   🐟 [${modeLabel}] ikan (${id})${coins ? ` +${coins} coin` : ''}${xpStr}`;
+    } else if (outcome === 'coins') {
+      tally.coins += coins;
+      tally.xp += xp;
+      line = `   💰 [${modeLabel}] +${coins} coins${xpStr}`;
+    } else if (outcome === 'chest') {
+      const c = r.chestCoins ?? coins;
+      tally.chests = (tally.chests || 0) + 1;
+      tally.coins += c;
+      tally.xp += xp;
+      line = `   🎁 [${modeLabel}] chest +${c} coins${xpStr}`;
+    } else if (outcome === 'junk') {
+      tally.junk = (tally.junk || 0) + 1;
+      line = `   🗑️ [${modeLabel}] junk (${r.junkId || '?'})${xpStr}`;
+    } else if (outcome === 'rod' || outcome === 'rod_upgrade') {
+      const lvl = r.rodLevel ?? r.newRodLevel ?? '?';
+      tally.rodUpgrades = (tally.rodUpgrades || 0) + 1;
+      line = `   🎣 [${modeLabel}] rod upgrade lvl ${lvl}${xpStr}`;
+    } else if (outcome === 'engine') {
+      const lvl = r.engineLevel ?? '?';
+      line = `   ⚙️ [${modeLabel}] engine upgrade lvl ${lvl}${xpStr}`;
+    } else if (outcome === 'relic') {
+      line = `   🏆 [${modeLabel}] relic${xpStr}`;
+    } else if (r?.error) {
+      // Body-level error (e.g. insufficient_funds) — common for meme-cast
+      line = `   ⚠ [${modeLabel}] ${r.error}${xpStr}`;
+    } else {
+      line = `   ❔ [${modeLabel}] outcome: ${outcome}${xpStr}`;
+    }
+    return line;
+  }
 
   while (true) {
     cycle++;
     try {
-      // 3a. Cast magnet → server returns { outcome, coinsAwarded, xpAwarded, ... }
+      // 3a. Cast each mode in order (e.g. ["magnet","meme"] → magnet first, then meme)
+      //     Server returns { outcome, coinsAwarded, xpAwarded, ... }
       //     outcome ∈ { fish, coins, chest, junk, rod, rod_upgrade, engine, relic }
-      info(acct.name, `[cycle ${cycle}] 🎣 cast magnet...`);
-      const r = await api.magnetCast();
+      for (let m = 0; m < castModes.length; m++) {
+        const mode = castModes[m];
+        const label = castModes.length > 1 ? `${m + 1}/${castModes.length}` : '';
+        info(acct.name, `[cycle ${cycle}] 🎣 cast ${mode}${label ? ' ' + label : ''}...`);
+        const r = mode === 'meme' ? await api.memeCast() : await api.magnetCast();
 
-      // DEBUG: dump full response once at cycle 1 to verify field names
-      if (cycle === 1 && process.env.VOXELFISHING_DEBUG) {
-        console.log(`   [DEBUG] cast response: ${JSON.stringify(r)}`);
-      }
-      const outcome = r?.outcome || r?.kind || 'unknown';
+        // DEBUG: dump full response once at cycle 1 to verify field names
+        if (cycle === 1 && m === 0 && process.env.VOXELFISHING_DEBUG) {
+          console.log(`   [DEBUG] ${mode} response: ${JSON.stringify(r)}`);
+        }
+        ok(acct.name, processCast(r, mode));
 
-      // Per-outcome line
-      let line = '';
-      const coins = r?.coinsAwarded || 0;
-      const xp = r?.xpAwarded || 0;
-      const xpStr = xp > 0 ? ` +${xp} XP` : '';
-      if (outcome === 'fish') {
-        const id = r.speciesId || r.uid?.slice(0, 8) || '?';
-        tally.fish++;
-        tally.coins += coins;
-        tally.xp += xp;
-        line = `   🐟 ikan (${id})${coins ? ` +${coins} coin` : ''}${xpStr}`;
-      } else if (outcome === 'coins') {
-        tally.coins += coins;
-        tally.xp += xp;
-        line = `   💰 +${coins} coins${xpStr}`;
-      } else if (outcome === 'chest') {
-        const c = r.chestCoins ?? coins;
-        tally.chests = (tally.chests || 0) + 1;
-        tally.coins += c;
-        tally.xp += xp;
-        line = `   🎁 chest +${c} coins${xpStr}`;
-      } else if (outcome === 'junk') {
-        tally.junk = (tally.junk || 0) + 1;
-        line = `   🗑️ junk (${r.junkId || '?'})${xpStr}`;
-      } else if (outcome === 'rod' || outcome === 'rod_upgrade') {
-        const lvl = r.rodLevel ?? r.newRodLevel ?? '?';
-        tally.rodUpgrades = (tally.rodUpgrades || 0) + 1;
-        line = `   🎣 rod upgrade lvl ${lvl}${xpStr}`;
-      } else if (outcome === 'engine') {
-        const lvl = r.engineLevel ?? '?';
-        line = `   ⚙️ engine upgrade lvl ${lvl}${xpStr}`;
-      } else if (outcome === 'relic') {
-        line = `   🏆 relic${xpStr}`;
-      } else {
-        line = `   ❔ outcome: ${outcome}${xpStr}`;
+        // Short pause between modes (1.5-3s) — biar server gak rate-limit
+        if (m < castModes.length - 1) {
+          await actionPause(1500, 3000);
+        }
       }
-      ok(acct.name, line);
 
       // Running tally
       info(acct.name,
         `   📊 tally: ${tally.fish} ikan, ${tally.coins} coins, ${tally.xp} XP` +
         (tally.chests ? `, ${tally.chests} chest` : '') +
-        (tally.junk ? `, ${tally.junk} junk` : '')
+        (tally.junk ? `, ${tally.junk} junk` : '') +
+        (tally.rodUpgrades ? `, ${tally.rodUpgrades} rod-up` : '')
       );
 
       // 3b. Random short pause (30% chance extra long)

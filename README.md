@@ -1,7 +1,7 @@
 # VoxelFishing Bot v3 — Simple
 
 > **Butuh setup cepet?** Loncat ke [Quick Start](#quick-start-untuk-pemula-5-menit) di bawah.
-> Versi advanced (cast mode rod/magnet, smart sell, character setup, dll) → [v2 docs](#v2-advanced-features) di bawah.
+> Versi advanced (character setup, smart sell thresholds, sell-by-rarity, dll) → [v2 docs](#v2-advanced-features) di bawah.
 
 Multi-account automation for [voxelfishing.com](https://voxelfishing.com) — Privy SIWS sign-in via Phantom, magnet-cast fishing loop, smart fish selling. Per-account SOCKS5/HTTP proxy + humanized timing to avoid detection.
 
@@ -12,11 +12,12 @@ Multi-account automation for [voxelfishing.com](https://voxelfishing.com) — Pr
 ## What's new in v3
 
 - **`bot.js` rewritten from scratch** (377 lines) — simple, top-to-bottom readable, Indonesian-friendly comments. Anyone can follow.
+- **Multi cast modes per cycle** — `castModes: ["magnet", "meme"]` does BOTH every cycle, not either/or. Old `castMode: "rod"` still works (treated as `["meme"]`).
 - **Multi-account CLI helpers** — `add-account`, `edit-account`, `remove-account`, `enable`/`disable`/`toggle`. Tambah akun baru gak perlu edit JSON manual.
 - **Setup wizard** — `npm run setup` buat first-time user. Detect placeholder wallet, prompt buat paste key (hidden input), test sign-in.
 - **`accounts.example.json` simplified** — 53 lines (was 100+). Comments link ke README buat advanced fields.
 - **Global `--no-proxy` flag** — paksa semua akun direct tanpa edit JSON.
-- **v2 (advanced) preserved** — `npm run start:v2` masih jalan, fitur lengkap (cast mode, smart sell, character setup, dll).
+- **v2 (advanced) preserved** — `npm run start:v2` masih jalan, fitur lengkap (character setup, smart sell, dll).
 
 ---
 
@@ -78,9 +79,9 @@ Output:
 ```
 === VoxelFishing: accounts ===
 
-#   name        enabled  castMode  proxy              token        wallet
-1   utama       ✓        magnet    —                  ✓           12jbY…W4P9n
-2   alt         ✓        magnet    socks5://***@…:…  ✗           5xK9…xx
+#   name        enabled  cast         proxy              token        wallet
+1   utama       ✓        magnet       —                  ✓           12jbY…W4P9n
+2   alt         ✓        magnet+meme  socks5://***@…:…  ✗           5xK9…xx
 ```
 
 - ✓ enabled / ✗ disabled
@@ -97,7 +98,7 @@ npm run toggle  -- alt     # flip
 ### 7. Edit akun
 
 ```bash
-npm run edit-account -- alt castMode rod
+npm run edit-account -- alt castModes '["magnet","meme"]'
 npm run edit-account -- alt proxy "socks5://newproxy:1080"
 npm run edit-account -- alt enabled true
 ```
@@ -180,7 +181,7 @@ voxelfishing-bot/
 | Privy SIWS sign-in (Phantom) | ✅ |
 | Token cache (`tokens.json`) | ✅ |
 | Per-account SOCKS5 / HTTP proxy | ✅ |
-| **2 cast modes** (magnet / rod) | ✅ v2.1 |
+| **Multi cast modes per cycle** (magnet + meme array) | ✅ v3.1 |
 | **REST character detection** (no WS overwrite) | ✅ v2.1 |
 | Daily grants claim | ✅ |
 | Relic set bonus claim | ✅ |
@@ -284,7 +285,8 @@ node bot-v2.js --once        # smoke test (3 cycles, exit)
 | `enabled` | ❌ | `true` | Skip account when `false` |
 | `claimGrants` | ❌ | `true` | Claim daily grants on startup |
 | `claimRelicSet` | ❌ | `true` | Claim relic set bonus |
-| **`castMode`** | ❌ | `magnet` | `magnet` / `rod` — see [Cast modes](#cast-modes) |
+| **`castModes`** | ❌ | `["magnet"]` | **Array of cast modes** — bot does each per cycle, in order. See [Cast modes](#cast-modes-v3) |
+| `castMode` (legacy) | ❌ | `magnet` | Old single-mode field. Still read for backward compat — `castMode: "rod"` is treated as `castModes: ["meme"]` |
 | `magnetMode` | ❌ | `on` | `on` / `off` |
 | `memeMode` | ❌ | `off` | `off` / `parallel` / `sequential` |
 | `memeMaxPerCycle` | ❌ | `1` | Max meme casts per main cycle |
@@ -316,45 +318,51 @@ The parser rejects invalid lengths and malformed input with clear error messages
 
 ---
 
-## Cast modes
+## Cast modes (v3)
 
-`castMode` switches which cast is **PRIMARY** each cycle:
+`castModes` is an **array** of cast actions the bot does **per cycle, in order**, with a 1.5–3s pause between each. You can mix and match — the bot will execute all of them every cycle.
 
-| Mode | Magnet-cast | Meme-cast | When to use |
-|------|-------------|-----------|-------------|
-| **`magnet`** (default) | Primary (free) | Parallel (paid, secondary) | You want to build wealth on the free cast, occasionally spend on memes |
-| **`rod`** | Fallback (when 402) | Primary (paid) | You have funds to burn and want to chase meme-fish |
+| Value | Action | Cost | When to use |
+|-------|--------|------|-------------|
+| `"magnet"` | `POST /api/me/magnet-cast` | Free (uses magnet item) | Default. Build wealth on free casts. |
+| `"meme"` | `POST /api/me/meme-cast` | Paid (meme token) | Burn meme tokens for meme-fish + coins. |
+| `"rod"` | *(alias for `"meme"`)* | Paid | Legacy name from `castMode: "rod"`. Normalized to `"meme"` at load. |
 
-### Example cycle — `castMode: "magnet"`
+### Common patterns
 
-```
-🟢 [utama] cycle 1 · magnet #1 → 💰 +25 coins (5 xp)
-⚪ [utama] cycle 1 · meme #1 → ⚠ 402 insufficient (skip)
-🟢 [utama] cycle 2 · magnet #2 → 🎁 +112 chest (30 xp) [rare]
-🟢 [utama] cycle 2 · meme #2 → 🟢 23 success
-🟢 [utama] cycle 3 · magnet #3 → 🗑️ junk (car_bumper)
-⚪ [utama] cycle 3 · meme #3 → ⚠ 402 insufficient (skip)
-```
+| `castModes` | Per-cycle actions | When |
+|-------------|-------------------|------|
+| `["magnet"]` | magnet only | Default. Free-only, slow but safe. |
+| `["meme"]` | meme only | Paid-only. Fast but burns meme tokens. |
+| `["magnet", "meme"]` | magnet → pause 1.5–3s → meme | **Most popular.** Free primary, paid secondary. |
+| `["meme", "magnet"]` | meme → pause 1.5–3s → magnet | Paid first (race for meme-fish), then free. |
 
-### Example cycle — `castMode: "rod"`
-
-```
-🟢 [utama] cycle 1 · meme #1 → ⚠ 402 insufficient (skip)
-🟢 [utama] cycle 1 · magnet #1 → 💰 +25 coins (5 xp) [fallback]
-🟢 [utama] cycle 2 · meme #2 → 🟢 23 success
-🟢 [utama] cycle 2 · magnet #2 → 💰 +18 coins (5 xp) [fallback]
-```
-
-### End-of-run summary (both modes)
+### Example cycle — `castModes: ["magnet", "meme"]`
 
 ```
-✓ [utama] finished · 3 cycles · 13s · 💰 19 coins · ⭐ 15 xp
-╭─ [utama] tally after 3 cycles (13s) ──────────
-│ 💰 19 coins   ⭐ 15 xp
-│ 🎁 0 chest   🗑️ 2 junk
-│ 📈 0 rod upgrades   ⚠ 0 meme skipped
-╰──────────────────────────────────────────────
+[14:23:01] [main] [cycle 1] 🎣 cast magnet 1/2...
+[14:23:01] [main]    🐟 [magnet] ikan (clownfish) +5 XP
+[14:23:03] [main] [cycle 1] 🎣 cast meme 2/2...
+[14:23:03] [main]    💰 [meme] +18 coins +8 XP
+[14:23:03] [main]    📊 tally: 1 ikan, 18 coins, 13 XP
+[14:23:03] [main]    😴 tidur 6.2s...
+
+[14:23:09] [main] [cycle 2] 🎣 cast magnet 1/2...
+[14:23:09] [main]    🐟 [magnet] ikan (pufferfish) +5 XP
+[14:23:11] [main] [cycle 2] 🎣 cast meme 2/2...
+[14:23:11] [main]    ⚠ [meme] insufficient_funds    ← bot keeps going, no crash
+[14:23:11] [main]    📊 tally: 2 ikan, 18 coins, 18 XP
 ```
+
+### Migrating from `castMode` (v2 → v3)
+
+| Old (still works) | New (recommended) |
+|-------------------|-------------------|
+| `castMode: "magnet"` | `castModes: ["magnet"]` |
+| `castMode: "rod"` | `castModes: ["meme"]` |
+| `castMode: "magnet"` + `memeMode: "parallel"` (both fired) | `castModes: ["magnet", "meme"]` |
+
+`npm run edit-account -- <name> castModes '["magnet", "meme"]'` will rewrite any account in-place.
 
 ---
 

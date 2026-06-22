@@ -13,7 +13,10 @@
 //   --proxy <url>      socks5:// or http:// proxy, empty for none
 //   --enabled          (default) — start the account enabled
 //   --disabled         start disabled
-//   --cast-mode <m>    magnet (default) | rod
+//   --cast-modes "magnet,meme"  comma-separated list (default: "magnet")
+//                              bot does each mode per cycle in order
+//                              accepted: magnet, meme, rod (rod = legacy alias for meme)
+//   --cast-mode <m>             backward compat — single mode (string), same as --cast-modes <m>
 //
 // Wallet input is hidden by default (* masked). Pass --no-hide to echo.
 
@@ -167,13 +170,28 @@ async function askHidden(q) {
     enabled = /^(y|yes|1|true)$/i.test(e);
   }
 
-  let castMode = val('--cast-mode');
-  if (castMode) {
-    console.log(`${T.dim}castMode: ${castMode} (from --cast-mode)${T.reset}`);
-  } else {
-    castMode = (await ask('Cast mode (magnet / rod)', 'magnet')).toLowerCase();
+  let castModes = val('--cast-modes');
+  if (!castModes) {
+    // Backward compat: old --cast-mode <m> flag (single mode as string)
+    const single = val('--cast-mode');
+    castModes = single || null;
   }
-  if (!['magnet', 'rod'].includes(castMode)) die(`invalid castMode: ${castMode}`);
+  if (castModes) {
+    console.log(`${T.dim}castModes: ${castModes} (from flag)${T.reset}`);
+  } else {
+    castModes = await ask('Cast modes (comma-separated, e.g. magnet,meme)', 'magnet');
+  }
+  // Parse: "magnet,meme" or "magnet meme" or "magnet" → ["magnet", "meme"]
+  const parsed = String(castModes).split(/[\s,]+/).filter(Boolean).map((m) => m.toLowerCase());
+  const valid = ['magnet', 'meme', 'rod'];  // rod = legacy alias for meme
+  const bad = parsed.filter((m) => !valid.includes(m));
+  if (bad.length > 0) die(`invalid cast mode(s): ${bad.join(', ')} (allowed: ${valid.join(', ')})`);
+  if (parsed.length === 0) die('cast modes required');
+  // Normalize: 'rod' → 'meme' (legacy alias)
+  const normalized = parsed.map((m) => m === 'rod' ? 'meme' : m);
+  // De-dupe while preserving order
+  const seen = new Set();
+  const final = normalized.filter((m) => !seen.has(m) && seen.add(m));
 
   // ── confirm + save ─────────────────────────────────────────────────────
   const newEntry = {
@@ -181,14 +199,14 @@ async function askHidden(q) {
     wallet,
     proxy: proxy || null,
     enabled,
-    castMode,
+    castModes: final,
   };
   console.log(`\n${T.dim}--- new account ---${T.reset}`);
-  console.log(`  ${T.dim}name:${T.reset}     ${name}`);
-  console.log(`  ${T.dim}wallet:${T.reset}   ${wallet.length > 14 ? wallet.slice(0, 6) + '…' + wallet.slice(-4) : wallet}`);
-  console.log(`  ${T.dim}proxy:${T.reset}    ${proxy || '(none)'}`);
-  console.log(`  ${T.dim}enabled:${T.reset}  ${enabled}`);
-  console.log(`  ${T.dim}castMode:${T.reset} ${castMode}`);
+  console.log(`  ${T.dim}name:${T.reset}      ${name}`);
+  console.log(`  ${T.dim}wallet:${T.reset}    ${wallet.length > 14 ? wallet.slice(0, 6) + '…' + wallet.slice(-4) : wallet}`);
+  console.log(`  ${T.dim}proxy:${T.reset}     ${proxy || '(none)'}`);
+  console.log(`  ${T.dim}enabled:${T.reset}   ${enabled}`);
+  console.log(`  ${T.dim}castModes:${T.reset} ${final.join(', ')}`);
   const confirm = await ask('\nSave?', 'y');
   if (!/^(y|yes|1|true)$/i.test(confirm)) {
     console.log(`${T.yellow}aborted${T.reset}`);
