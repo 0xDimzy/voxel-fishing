@@ -1,102 +1,53 @@
-// ============================================================================
-//  VoxelFishing Bot v2 — accounts.example.json
+// =============================================================================
+//  VoxelFishing Bot — accounts.example.json
 //  TEMPLATE — copy to accounts.json and edit. JSON5 syntax (// comments OK).
 //
-//  IMPORTANT: This example is committed to git. Real accounts.json is gitignored.
-// ============================================================================
+//  ⭐ RECOMMENDED: use the wizard instead of editing this file by hand.
+//     $ npm run add-account
+//     (or:  npm run add-account -- --name alt --wallet 5xK9... --cast-mode rod)
+//
+//  This file documents ALL possible fields. Most accounts only need 4 lines:
+//     { "name": "...", "wallet": "...", "proxy": null, "enabled": true }
+//
+//  Other fields have sensible defaults (see lib/accounts.js).
+//  Override only what you want different.
+// =============================================================================
 
 [
+  // ── Minimal account (works for most users) ───────────────────────────────
   {
-    // ── Identity ────────────────────────────────────────────────────────────
-    // REQUIRED. Unique label used in logs (e.g. "[main] starting").
     "name": "main",
-
-    // REQUIRED. Solana private key. Wallet parser (lib/wallet.js) auto-detects:
-    //   - base58 (Phantom "Export Private Key")
-    //   - JSON array  (Phantom export JSON)
-    //   - base64
-    //   - hex  with 0x prefix  (e.g. 0xab12cd...)
-    //   - hex  no prefix       (e.g. ab12cd...)
-    "wallet": "<YOUR_PHANTOM_PRIVATE_KEY>",
-
-    // OPTIONAL. SOCKS5 or HTTP proxy URL, or null for direct connection.
-    "proxy": "socks5://user:pass@host:1080",
-
-    // OPTIONAL. false = skip this account entirely.
+    "wallet": "<YOUR_PHANTOM_PRIVATE_KEY>",     // any format — base58/JSON/base64/hex
+    "proxy": null,                                // socks5:// or http:// — null for direct
     "enabled": true,
-
-    // ── Daily claims (run on every sign-in) ────────────────────────────────
-    "claimGrants": true,
-    "claimRelicSet": true,
-
-    // ── Cast mode (PRIMARY fishing strategy) ───────────────────────────────
-    //   "magnet" (default) — magnet-cast PRIMARY, meme-cast parallel
-    //   "rod"              — meme-cast PRIMARY, magnet-cast as fallback
-    //                        when insufficient funds
-    "castMode": "magnet",
-
-    // ── Magnet-cast (free, primary income in magnet mode) ──────────────────
-    "magnetMode": "on",
-
-    // ── Meme-cast (costs coins, requires funds) ────────────────────────────
-    "memeMode": "parallel",
-    "memeMaxPerCycle": 1,
-
-    // ── Smart sell (auto-sell fish by rarity) ──────────────────────────────
-    "sellMode": "off",
-    "sellThreshold": 50,
-    "sellMaxRarity": "rare",
-    "keepMythics": true,
-
-    // ── Consume fish/pets for auras ────────────────────────────────────────
-    "consumeAbyssLurker": true,
-    "consumeTargets": [
-      "abysslurker",
-    ],
-
-    // ── Pet auto-sell ──────────────────────────────────────────────────────
-    "sellPets": "off",
-
-    // ── Character (set once via browser, bot respects it) ──────────────────
-    "character": {
-      //   "skip"   (default) — never touch server character
-      //   "config"          — force character from this file every run
-      //   "auto"            — set once from config, then skip
-      "mode": "skip",
-
-      // Boat ID — fishingBoat, tugboat, wifBoat, etc.
-      // See lib/character.js for the full allowlist of 26 boats.
-      "boat": "sailboat",
-
-      // Hull color hex (#RRGGBB).
-      "hull": "#3f6fa9",
-
-      // Accent color hex (#RRGGBB).
-      "accent": "#7fd4e8",
-
-      // NOTE: Name lives in WS hello state (NOT in saveData).
-      // Bot cannot reliably read/write it without overwriting.
-      // Set name in browser, not here.
-    },
+    // "castMode": "magnet",                      // magnet (default) | rod — see README
   },
 
-  // ── Second account example (commented out — remove // to enable) ─────────
+  // ── Account with full overrides (commented — remove // to enable) ──────
   // {
   //   "name": "alt",
-  //   "wallet": "<ANOTHER_WALLET>",
-  //   "proxy": null,
-  //   "enabled": false,
+  //   "wallet": "<ANOTHER_PHANTOM_PRIVATE_KEY>",
+  //   "proxy": "socks5://user:pass@host:1080",
+  //   "enabled": true,
   //
-  //   "castMode": "rod",            // <-- try rod mode on this account
-  //   "magnetMode": "on",
-  //   "memeMode": "parallel",
-  //   "memeMaxPerCycle": 2,
+  //   "claimGrants": true,           // claim daily grant on sign-in
+  //   "claimRelicSet": true,         // claim relic set bonus
+  //   "castMode": "rod",             // magnet | rod (rod = meme-first, magnet fallback)
+  //   "magnetMode": "on",            // on | off
+  //   "memeMode": "parallel",        // off | parallel | sequential
+  //   "memeMaxPerCycle": 1,
+  //   "sellMode": "off",             // off | on — auto-sell fish by rarity
+  //   "sellThreshold": 50,           // keep this many fish before selling
+  //   "sellMaxRarity": "rare",       // common | uncommon | rare | epic | legendary | mythic
+  //   "keepMythics": true,           // always keep mythic fish
+  //   "consumeAbyssLurker": true,    // auto-consume for Abyssal Aura
+  //   "sellPets": "off",             // off | auto
   //
-  //   "character": {
-  //     "mode": "skip",
-  //     "boat": "pirateBoat",
-  //     "hull": "#c44f4f",
-  //     "accent": "#f5c542"
+  //   "character": {                 // see README "Character setup mode"
+  //     "mode": "skip",              // skip | config | auto
+  //     "boat": "sailboat",          // see README "Boats" for full list
+  //     "hull": "#3f6fa9",           // #RRGGBB
+  //     "accent": "#7fd4e8"          // #RRGGBB
   //   }
   // }
 ]

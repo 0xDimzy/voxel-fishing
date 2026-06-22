@@ -1,18 +1,174 @@
-# VoxelFishing Bot v2.1
+# VoxelFishing Bot v3 — Simple
 
-Multi-account automation for [voxelfishing.com](https://voxelfishing.com) — Privy SIWS sign-in via Phantom, **2 cast modes** (magnet / rod), smart fish selling, pet management, REST-based character detection. Per-account SOCKS5/HTTP proxy + humanized timing to avoid detection.
+> **Butuh setup cepet?** Loncat ke [Quick Start](#quick-start-untuk-pemula-5-menit) di bawah.
+> Versi advanced (cast mode rod/magnet, smart sell, character setup, dll) → [v2 docs](#v2-advanced-features) di bawah.
 
-> **Disclaimer**: Use at your own risk. The author is not responsible for any bans or losses. This bot is for educational purposes — respect the game's TOS.
+Multi-account automation for [voxelfishing.com](https://voxelfishing.com) — Privy SIWS sign-in via Phantom, magnet-cast fishing loop, smart fish selling. Per-account SOCKS5/HTTP proxy + humanized timing to avoid detection.
+
+> **Disclaimer**: Use at your own risk. The author is not responsible for any bans or losses. Respect the game's TOS.
 
 ---
 
-## What's new in v2.1
+## What's new in v3
 
-- **Cast mode switch** — `castMode: "magnet" | "rod"` per account. `rod` flips priority (meme-cast first, magnet as fallback when 402).
-- **JSON5 `accounts.json`** — full `//` comment support. Surgical writeback via `jsonc-parser` preserves comments through character auto-detection.
-- **UI overhaul** — colored emoji outcomes (`💰 coins`, `🎁 chest`, `🗑️ junk`, `📈 rod lvl 2`), per-cycle tally box, end-of-run summary.
-- **Body-level error handling** — `{error:"insufficient_funds"}` and `{error:"rate_limited"}` (HTTP 200 with error in body) now caught cleanly.
-- **REST-first character detection** — `skip` mode reads `/api/me/save.boatAppearance` via REST. No WS hello, no name overwrite. `config`/`auto` modes still use WS `applyCharacter`.
+- **`bot.js` rewritten from scratch** (377 lines) — simple, top-to-bottom readable, Indonesian-friendly comments. Anyone can follow.
+- **Multi-account CLI helpers** — `add-account`, `edit-account`, `remove-account`, `enable`/`disable`/`toggle`. Tambah akun baru gak perlu edit JSON manual.
+- **Setup wizard** — `npm run setup` buat first-time user. Detect placeholder wallet, prompt buat paste key (hidden input), test sign-in.
+- **`accounts.example.json` simplified** — 53 lines (was 100+). Comments link ke README buat advanced fields.
+- **Global `--no-proxy` flag** — paksa semua akun direct tanpa edit JSON.
+- **v2 (advanced) preserved** — `npm run start:v2` masih jalan, fitur lengkap (cast mode, smart sell, character setup, dll).
+
+---
+
+## Quick Start (untuk pemula, 5 menit)
+
+### 1. Install
+
+```bash
+cd /root/voxelfishing-bot
+npm install
+```
+
+### 2. Setup akun pertama
+
+```bash
+npm run setup
+```
+
+Wizard bakal:
+1. Cek `accounts.json` ada (copy template kalo belum)
+2. Detect wallet placeholder, prompt lo paste Phantom private key (input di-mask `*****`)
+3. Tanya proxy (ENTER buat skip)
+4. Save + test sign-in (`--auth-only`)
+
+Atau kalo lo males wizard:
+```bash
+npm run add-account
+```
+
+### 3. Run bot
+
+```bash
+npm run start              # jalanin semua akun (parallel)
+npm run start -- --no-proxy        # paksa semua akun direct
+npm run start -- --account utama  # cuma akun "utama"
+npm run once               # smoke test (3 cycle per akun, terus exit)
+npm run accounts           # lihat semua akun + status token
+```
+
+### 4. Tambah akun kedua
+
+```bash
+npm run add-account
+# wizard: name? wallet? proxy? done.
+```
+
+Atau non-interactive:
+```bash
+npm run add-account -- --name alt --wallet "<PHANTOM_KEY>" --proxy "socks5://user:pass@host:1080" --cast-mode magnet
+```
+
+### 5. Cek status
+
+```bash
+npm run accounts
+```
+
+Output:
+```
+=== VoxelFishing: accounts ===
+
+#   name        enabled  castMode  proxy              token        wallet
+1   utama       ✓        magnet    —                  ✓           12jbY…W4P9n
+2   alt         ✓        magnet    socks5://***@…:…  ✗           5xK9…xx
+```
+
+- ✓ enabled / ✗ disabled
+- token ✓ = ada di `tokens.json` (sign-in OK), ✗ = perlu login ulang
+
+### 6. Enable / disable akun
+
+```bash
+npm run enable  -- alt     # alt.enabled = true
+npm run disable -- alt     # alt.enabled = false
+npm run toggle  -- alt     # flip
+```
+
+### 7. Edit akun
+
+```bash
+npm run edit-account -- alt castMode rod
+npm run edit-account -- alt proxy "socks5://newproxy:1080"
+npm run edit-account -- alt enabled true
+```
+
+### 8. Hapus akun
+
+```bash
+npm run remove-account -- alt                # confirmation prompt
+npm run remove-account -- alt --force        # skip prompt
+```
+
+---
+
+## Proxy on/off — gimana caranya?
+
+3 cara, sesuai kebutuhan:
+
+| Level | Cara | Efek |
+|---|---|---|
+| **Per akun (recommended)** | `"proxy": "socks5://user:pass@host:1080"` di `accounts.json` | Akun spesifik pakai proxy |
+| **Per akun direct** | `"proxy": null` di `accounts.json` | Akun spesifik direct |
+| **Global override** | `npm run start -- --no-proxy` | Semua akun dipaksa direct (ignore JSON) |
+
+Edit JSON:
+```bash
+npm run edit-account -- alt proxy "socks5://user:pass@host:1080"
+npm run edit-account -- alt proxy null          # balik ke direct
+```
+
+Atau tambah akun baru langsung dari CLI:
+```bash
+npm run add-account -- --name alt2 --wallet "<KEY>" --proxy "socks5://..." --cast-mode magnet
+```
+
+Format proxy yang didukung: `socks5://`, `socks4://`, `http://`, `https://` (full URL with `user:pass@host:port`).
+
+---
+
+## File structure (v3 simple)
+
+```
+voxelfishing-bot/
+├── bot.js                       ← main bot (simple, 377 lines, Indo comments)
+├── bot-v2.js                    ← advanced bot (cast mode, smart sell, etc.)
+├── lib/
+│   ├── auth.js                  ← Privy SIWS sign-in
+│   ├── api.js                   ← VoxelAPI wrapper (proxy-aware)
+│   ├── wallet.js                ← Phantom multi-format parser
+│   ├── accounts.js              ← JSON5 load + surgical writeback
+│   └── humanize.js              ← random delay helpers
+├── scripts/
+│   ├── setup-wizard.js          ← first-time setup (`npm run setup`)
+│   ├── add-account.js           ← add new account (`npm run add-account`)
+│   ├── list-accounts.js         ← overview (`npm run accounts`)
+│   ├── edit-account.js          ← edit field (`npm run edit-account`)
+│   ├── toggle-account.js        ← enable/disable (`npm run enable/disable`)
+│   └── remove-account.js        ← delete account (`npm run remove-account`)
+├── accounts.json                ← YOUR accounts (gitignored, mode 600)
+├── accounts.example.json        ← template (commit-safe, 53 lines)
+├── tokens.json                  ← JWT cache per account (gitignored)
+└── package.json
+```
+
+---
+
+## v2 (advanced features)
+
+<details>
+<summary>Click to expand v2 docs (cast mode, smart sell, character setup, etc.)</summary>
+
+</details>
 
 ---
 
@@ -236,6 +392,33 @@ npm run account -- main       # run single account by name
 | `--once` | 3 cycles per account, then exit |
 | `--no-proxy` | Force direct connection |
 | `--verbose` | Log every API call |
+
+### Multi-account management
+
+```bash
+npm run accounts              # show all accounts + token status
+npm run add-account           # interactive wizard — append new account
+npm run add-account -- --name alt --wallet 5xK9... --cast-mode rod   # non-interactive
+npm run enable  -- alt        # set enabled = true
+npm run disable -- alt        # set enabled = false
+npm run toggle  -- alt        # flip current value
+npm run edit-account -- alt castMode rod              # change one field
+npm run edit-account -- alt proxy "socks5://user@host:1080"
+npm run edit-account -- alt proxy ""                  # clear proxy (direct)
+npm run remove-account -- alt                        # remove (asks confirmation)
+npm run remove-account -- alt --force                 # skip confirmation
+```
+
+`accounts.json` accepts JSON5 — comments are preserved through edits (`jsonc-parser` surgical updates).
+
+**Workflow:**
+1. `npm run accounts` — see what's there
+2. `npm run add-account` — answer name/wallet/proxy prompts (wallet hidden by default)
+3. `npm run auth:v2 -- --account <name>` — sign-in + write tokens.json for new account
+4. `npm run account -- <name>` — smoke test (3 cycles)
+5. `npm run start:v2` — run all enabled accounts in parallel
+
+Default behavior: accounts run in **parallel** (via `Promise.all`). Add `[// accounts]: ────────── multi-account helpers ──────────` (cosmetic, ignored by npm) — these are documentation lines, not real scripts.
 
 ---
 

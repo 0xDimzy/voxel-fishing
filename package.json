@@ -1,16 +1,25 @@
 {
   "name": "voxelfishing-bot",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
-  "description": "VoxelFishing multi-account bot — Privy SIWS sign-in, character setup, magnet/meme casting, smart fish selling, pet management.",
+  "description": "VoxelFishing bot — simple multi-account (per-akun proxy, cast/sell loop), Privy SIWS sign-in, humanized timing.",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
     "start:v2": "node bot-v2.js",
     "auth": "node bot.js --auth-only",
     "auth:v2": "node bot-v2.js --auth-only",
-    "once": "node bot-v2.js --once",
-    "account": "node bot-v2.js --account"
+    "once": "node bot.js --once",
+    "account": "node bot.js --account",
+    "// accounts": "────────── multi-account helpers ──────────",
+    "accounts": "node scripts/list-accounts.js",
+    "add-account": "node scripts/add-account.js",
+    "edit-account": "node scripts/edit-account.js",
+    "remove-account": "node scripts/remove-account.js",
+    "enable": "node scripts/toggle-account.js --enable",
+    "disable": "node scripts/toggle-account.js --disable",
+    "toggle": "node scripts/toggle-account.js",
+    "setup": "node scripts/setup-wizard.js"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.0",
